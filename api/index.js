@@ -17,7 +17,21 @@ const upload = multer({ storage: multer.memoryStorage() });
 const salt = bcrypt.genSaltSync(10);
 const secret = process.env.JWT_SECRET;
 
-app.use(cors({ credentials: true, origin: process.env.CLIENT_URL }));
+const allowedOrigins = [
+  'https://post-blog-test-x7xc.vercel.app', // your frontend URL
+  'https://test-blog-front.vercel.app' // other allowed frontend URL
+];
+
+app.use(cors({
+  credentials: true,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 app.use(cookieParser());
 
