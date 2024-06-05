@@ -10,7 +10,7 @@ export default function PostPage() {
   const { id } = useParams();
 
   useEffect(() => {
-    fetch(`https://test-kappa-ten-90.vercel.app/post/${id}`)
+    fetch(`https://post-blog-test.vercel.app/post/${id}`)
       .then(response => {
         response.json().then(postInfo => {
           setPostInfo(postInfo);
