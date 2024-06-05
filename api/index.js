@@ -21,13 +21,16 @@ app.use(cors({ credentials: true, origin: process.env.CLIENT_URL }));
 app.use(express.json());
 app.use(cookieParser());
 
-mongoose.connect(process.env.MONGO_URL, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => console.log('MongoDB connected'))
+  .catch((error) => console.error('MongoDB connection error:', error));
 
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
 const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
+
+if (!AZURE_STORAGE_CONNECTION_STRING) {
+  throw new Error('AZURE_STORAGE_CONNECTION_STRING environment variable is not set');
+}
 
 const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
 const containerClient = blobServiceClient.getContainerClient(containerName);
