@@ -81,7 +81,7 @@ app.post('/login', async (req, res) => {
           console.error('JWT sign error:', err);
           return res.status(500).json('Internal server error');
         }
-        res.cookie('token', token, { httpOnly: true }).json({
+        res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true }).json({
           id: userDoc._id,
           username,
         });
@@ -94,6 +94,7 @@ app.post('/login', async (req, res) => {
     res.status(500).json('Internal server error');
   }
 });
+
 
 app.get('/profile', (req, res) => {
   const { token } = req.cookies;
@@ -109,6 +110,7 @@ app.get('/profile', (req, res) => {
     res.json(info);
   });
 });
+
 
 app.post('/logout', (req, res) => {
   res.cookie('token', '').json('ok');
