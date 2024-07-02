@@ -14,10 +14,10 @@ export default function PostPage() {
       .then(response => {
         response.json().then(postInfo => {
           setPostInfo(postInfo);
-          console.log(postInfo);
         });
       });
   }, []);
+  console.log(postInfo);
 
   if (!postInfo) return '';
 
@@ -37,9 +37,10 @@ export default function PostPage() {
         </div>
       )}
       <div className="image">
-        <img src={`http://localhost:4000/${postInfo.cover}`} alt=""/>
+        <img src={postInfo.cover} alt=""/>
       </div>
       <div className="content" dangerouslySetInnerHTML={{__html:postInfo.content}} />
     </div>
   );
 }
+
