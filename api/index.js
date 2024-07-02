@@ -8,7 +8,7 @@ const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
-const { BlobServiceClient } = require('@azure/storage-blob');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
 dotenv.config();
 const app = express();
@@ -17,20 +17,47 @@ const upload = multer({ storage: multer.memoryStorage() });
 const salt = bcrypt.genSaltSync(10);
 const secret = process.env.JWT_SECRET;
 
-app.use(cors({ credentials: true, origin: process.env.CLIENT_URL }));
+const allowedOrigins = [
+  'https://post-blog-test-x7xc.vercel.app',
+  'https://test-blog-front.vercel.app',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  credentials: true,
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 app.use(cookieParser());
 
-mongoose.connect(process.env.MONGO_URL, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => console.log('MongoDB connected'))
+  .catch((error) => console.error('MongoDB connection error:', error));
+
+const s3Client = new S3Client({
+  region: process.env.S3_REGION,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  },
 });
 
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
-const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
-
-const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
-const containerClient = blobServiceClient.getContainerClient(containerName);
+async function uploadToS3(fileBuffer, fileName, mimeType) {
+  const command = new PutObjectCommand({
+    Bucket: process.env.S3_BUCKET_NAME,
+    Key: fileName,
+    Body: fileBuffer,
+    ContentType: mimeType,
+  });
+  const response = await s3Client.send(command);
+  return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION}.amazonaws.com/${fileName}`;
+}
 
 app.get('/', (req, res) => {
   res.json('test is running ok');
@@ -64,7 +91,7 @@ app.post('/login', async (req, res) => {
           console.error('JWT sign error:', err);
           return res.status(500).json('Internal server error');
         }
-        res.cookie('token', token, { httpOnly: true }).json({
+        res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true }).json({
           id: userDoc._id,
           username,
         });
@@ -98,14 +125,11 @@ app.post('/logout', (req, res) => {
 });
 
 app.post('/post', upload.single('file'), async (req, res) => {
-  const { originalname, buffer } = req.file;
-  const blobName = `${Date.now()}_${originalname}`;
-  const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+  const { originalname, buffer, mimetype } = req.file;
+  const fileName = `${Date.now()}_${originalname}`;
 
   try {
-    await blockBlobClient.upload(buffer, buffer.length, {
-      blobHTTPHeaders: { blobContentType: req.file.mimetype }
-    });
+    const fileUrl = await uploadToS3(buffer, fileName, mimetype);
 
     const { token } = req.cookies;
     if (!token) {
@@ -122,7 +146,7 @@ app.post('/post', upload.single('file'), async (req, res) => {
           title,
           summary,
           content,
-          cover: blockBlobClient.url,
+          cover: fileUrl,
           author: info.id,
         });
         res.json(postDoc);
@@ -132,25 +156,21 @@ app.post('/post', upload.single('file'), async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Azure Blob Storage upload error:', error);
+    console.error('S3 upload error:', error);
     res.status(500).json('Internal server error');
   }
 });
 
 app.put('/post', upload.single('file'), async (req, res) => {
-  let newBlobUrl = null;
+  let newFileUrl = null;
   if (req.file) {
-    const { originalname, buffer } = req.file;
-    const blobName = `${Date.now()}_${originalname}`;
-    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    const { originalname, buffer, mimetype } = req.file;
+    const fileName = `${Date.now()}_${originalname}`;
 
     try {
-      await blockBlobClient.upload(buffer, buffer.length, {
-        blobHTTPHeaders: { blobContentType: req.file.mimetype }
-      });
-      newBlobUrl = blockBlobClient.url;
+      newFileUrl = await uploadToS3(buffer, fileName, mimetype);
     } catch (error) {
-      console.error('Azure Blob Storage upload error:', error);
+      console.error('S3 upload error:', error);
       return res.status(500).json('Internal server error');
     }
   }
@@ -175,7 +195,7 @@ app.put('/post', upload.single('file'), async (req, res) => {
       postDoc.title = title;
       postDoc.summary = summary;
       postDoc.content = content;
-      postDoc.cover = newBlobUrl ? newBlobUrl : postDoc.cover;
+      postDoc.cover = newFileUrl ? newFileUrl : postDoc.cover;
 
       await postDoc.save();
 
@@ -186,7 +206,6 @@ app.put('/post', upload.single('file'), async (req, res) => {
     }
   });
 });
-
 
 app.get('/post', async (req, res) => {
   try {
