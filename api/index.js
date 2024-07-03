@@ -4,15 +4,13 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const Post = require('./models/Post');
 const bcrypt = require('bcryptjs');
+const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
-const fs = require('fs');
-const dotenv = require('dotenv');
-
-dotenv.config();
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
+dotenv.config();
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -22,7 +20,7 @@ const secret = process.env.JWT_SECRET;
 const allowedOrigins = [
   'https://post-blog-test-x7xc.vercel.app',
   'https://test-blog-front.vercel.app',
-  'http://localhost:3000'
+  'http://localhost:3000' 
 ];
 
 app.use(cors({
@@ -37,9 +35,10 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
-app.use('/uploads', express.static(__dirname + '/uploads'));
 
-mongoose.connect(process.env.MONGO_URL);
+mongoose.connect(process.env.MONGO_URL)
+  .then(() => console.log('MongoDB connected'))
+  .catch((error) => console.error('MongoDB connection error:', error));
 
 const s3Client = new S3Client({
   region: process.env.S3_REGION,
@@ -47,7 +46,7 @@ const s3Client = new S3Client({
     accessKeyId: process.env.S3_ACCESS_KEY,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
   },
-}); 
+});
 
 async function uploadToS3(fileBuffer, fileName, mimeType) {
   const command = new PutObjectCommand({
@@ -59,6 +58,10 @@ async function uploadToS3(fileBuffer, fileName, mimeType) {
   const response = await s3Client.send(command);
   return `https://${process.env.S3_BUCKET_NAME}.s3.${process.env.S3_REGION}.amazonaws.com/${fileName}`;
 }
+
+app.get('/', (req, res) => {
+  res.json('test is running ok');
+});
 
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
@@ -88,7 +91,7 @@ app.post('/login', async (req, res) => {
           console.error('JWT sign error:', err);
           return res.status(500).json('Internal server error');
         }
-        res.cookie('token', token, { httpOnly: true }).json({
+        res.cookie('token', token, { httpOnly: true, sameSite: 'None', secure: true }).json({
           id: userDoc._id,
           username,
         });
@@ -101,6 +104,7 @@ app.post('/login', async (req, res) => {
     res.status(500).json('Internal server error');
   }
 });
+
 
 app.get('/profile', (req, res) => {
   const { token } = req.cookies;
@@ -117,9 +121,11 @@ app.get('/profile', (req, res) => {
   });
 });
 
+
 app.post('/logout', (req, res) => {
   res.cookie('token', '').json('ok');
 });
+
 app.post('/post', upload.single('file'), async (req, res) => {
   const { originalname, buffer, mimetype } = req.file;
   const fileName = `${Date.now()}_${originalname}`;
@@ -203,7 +209,6 @@ app.put('/post', upload.single('file'), async (req, res) => {
   });
 });
 
-
 app.get('/post', async (req, res) => {
   try {
     const posts = await Post.find()
@@ -228,6 +233,4 @@ app.get('/post/:id', async (req, res) => {
   }
 });
 
-app.listen(4000, () => {
-  console.log('Server running on http://localhost:4000');
-});
+module.exports = app;
