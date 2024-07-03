@@ -4,7 +4,7 @@ import {useEffect, useState} from "react";
 export default function IndexPage() {
   const [posts,setPosts] = useState([]);
   useEffect(() => {
-    fetch('https://post-blog-test.vercel.app/post').then(response => {
+    fetch('https://post-blog-test-back.vercel.app/post').then(response => {
       response.json().then(posts => {
         setPosts(posts);
       });
