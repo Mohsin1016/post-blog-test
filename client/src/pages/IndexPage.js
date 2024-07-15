@@ -1,3 +1,4 @@
+import React from "react";
 import Post from "../Post";
 import {useEffect, useState} from "react";
 
